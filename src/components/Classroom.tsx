@@ -15,9 +15,12 @@ const Classroom = () => {
   const [animationType, setAnimationType] = useState("idle");
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [transcript, setTranscript] = useState("");
-  const [spokenText, setSpokenText] = useState("");  // New state to track spoken text
+  const [spokenText, setSpokenText] = useState(""); // New state to track spoken text
   const mixerRef = useRef<AnimationMixer | null>(null);
-  const avatar = useLoader(GLTFLoader, process.env.PUBLIC_URL + "/models/teacher.glb");
+  const avatar: any = useLoader(
+    GLTFLoader,
+    process.env.PUBLIC_URL + "/models/old_teacher.glb"
+  );
 
   // Use refs for movement control
   const movementRef = useRef({ x: 0 });
@@ -41,8 +44,8 @@ const Classroom = () => {
   }, []);
 
   // Define boundaries for movement (left and right constraints)
-  const minX = -(canvasWidth / 2 - avatarWidth);  // Minimum X position (left boundary)
-  const maxX = canvasWidth / 2 - avatarWidth;     // Maximum X position (right boundary)
+  const minX = -(canvasWidth / 2 - avatarWidth); // Minimum X position (left boundary)
+  const maxX = canvasWidth / 2 - avatarWidth; // Maximum X position (right boundary)
 
   const moveAvatar = (direction: string) => {
     if (isMoving) return; // Prevent moving if already moving
@@ -78,9 +81,12 @@ const Classroom = () => {
         setTranscript(speechResult);
 
         if (speechResult.includes("introduce yourself")) {
-          speakText("Hello, I am your AI teacher. Let's learn something new today!");
+          speakText(
+            "Hello, I am your AI teacher. Let's learn something new today!"
+          );
         } else if (speechResult.includes("hello teacher")) {
           setAnimationType("wave");
+          speakText("Hello there!");
           setTimeout(() => setAnimationType("idle"), 5000);
         } else if (speechResult.includes("jump")) {
           moveAvatar("jump");
@@ -97,29 +103,63 @@ const Classroom = () => {
   };
 
   const speakText = (text: string) => {
-    if (isSpeaking) return; // Prevent speaking if already speaking
-
+    if (isSpeaking) return;
+  
     if ("speechSynthesis" in window) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.voice = voices[0] || null;
+  
+      const words = text.split(" ");
+      const wordDurations = words.map((word) => 250 + word.length * 50); // Adjust durations based on word length
+  
       utterance.onstart = () => {
         setIsSpeaking(true);
         setTranscript(text);
-        setSpokenText("");  // Reset spoken text when starting to speak
-      }; // Set speaking state to true when speaking starts
+        setSpokenText("");
+  
+        // Schedule morph target changes for each word
+        let cumulativeDelay = 0;
+        words.forEach((word, index) => {
+          const wordDelay = cumulativeDelay;
+          cumulativeDelay += wordDurations[index];
+  
+          setTimeout(() => {
+            if (avatar && avatar.nodes && avatar.nodes.Wolf3D_Head001) {
+              avatar.nodes.Wolf3D_Head001.morphTargetInfluences[0] = 1.0; // Open mouth
+              avatar.nodes.Wolf3D_Head001.morphTargetInfluences[1] = Math.random() * 0.4 + 0.3;
+            }
+  
+            setTimeout(() => {
+              if (avatar && avatar.nodes && avatar.nodes.Wolf3D_Head001) {
+                avatar.nodes.Wolf3D_Head001.morphTargetInfluences[0] = 0;
+                avatar.nodes.Wolf3D_Head001.morphTargetInfluences[1] = 0;
+              }
+            }, wordDurations[index] / 1.5);
+          }, wordDelay);
+        });
+      };
+  
       utterance.onend = () => {
         setIsSpeaking(false);
         setTranscript("");
-        setSpokenText(text); // Set the full text after speaking ends
-      }; // Reset speaking state when speaking ends
-
-      // Speak the text and add to queue
+        setSpokenText(text);
+  
+        // Reset morph targets after speech ends
+        if (avatar && avatar.nodes && avatar.nodes.Wolf3D_Head001) {
+          avatar.nodes.Wolf3D_Head001.morphTargetInfluences[0] = 0;
+          avatar.nodes.Wolf3D_Head001.morphTargetInfluences[1] = 0;
+        }
+      };
+  
+      // Start speech synthesis
       window.speechSynthesis.speak(utterance);
     }
   };
-
+  
+  
   useEffect(() => {
-    const loadVoices = () => setVoices(window.speechSynthesis.getVoices() || []);
+    const loadVoices = () =>
+      setVoices(window.speechSynthesis.getVoices() || []);
     if ("speechSynthesis" in window) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
       loadVoices();
@@ -132,6 +172,7 @@ const Classroom = () => {
         avatar.scene.scale.set(2, 2, 1);
         avatar.scene.position.set(0, -1.3, 0); // Ground level
         mixerRef.current = new AnimationMixer(avatar.scene);
+
         const animationClip = avatar.animations.find(
           (clip: THREE.AnimationClip) => clip.name === animationType
         );
@@ -149,7 +190,10 @@ const Classroom = () => {
         avatarRef.current.position.x += movementRef.current.x;
 
         // Apply boundary constraints to ensure the avatar doesn't move off-screen
-        avatarRef.current.position.x = Math.min(Math.max(avatarRef.current.position.x, minX), maxX);
+        avatarRef.current.position.x = Math.min(
+          Math.max(avatarRef.current.position.x, minX),
+          maxX
+        );
 
         // Reset movement direction after applying it
         if (movementRef.current.x !== 0) {
@@ -175,21 +219,46 @@ const Classroom = () => {
       {/* Transcript Display */}
       <div style={transcriptContainerStyles}>
         <div style={transcriptStyles}>
-          <p>{transcript || "Say 'Hello teacher', 'Introduce yourself', 'Please Jump', 'Move Left', or 'Move Right'"}</p>
+          <p>
+            {transcript ||
+              "Say 'Hello teacher', 'Introduce yourself', 'Please Jump', 'Move Left', or 'Move Right'"}
+          </p>
         </div>
       </div>
 
       {/* Button Controls */}
       <div style={buttonContainerStyles}>
-        <button onClick={() => speakText("Hello, I am your AI teacher. Let's learn something new today!")} style={buttonStyles("blue")}>
+        <button
+          onClick={() =>
+            speakText(
+              "Hello, I am your AI teacher. Let's learn something new today!"
+            )
+          }
+          style={buttonStyles("blue")}
+        >
           {isSpeaking ? "Speaking..." : "Speak Intro"}
         </button>
         <button onClick={startSpeechRecognition} style={buttonStyles("red")}>
           Start Listening
         </button>
-        <button onClick={() => moveAvatar("jump")} style={buttonStyles("green")}>Jump</button>
-        <button onClick={() => moveAvatar("left")} style={buttonStyles("green")}>Move Left</button>
-        <button onClick={() => moveAvatar("right")} style={buttonStyles("green")}>Move Right</button>
+        <button
+          onClick={() => moveAvatar("jump")}
+          style={buttonStyles("green")}
+        >
+          Jump
+        </button>
+        <button
+          onClick={() => moveAvatar("left")}
+          style={buttonStyles("green")}
+        >
+          Move Left
+        </button>
+        <button
+          onClick={() => moveAvatar("right")}
+          style={buttonStyles("green")}
+        >
+          Move Right
+        </button>
       </div>
     </>
   );
@@ -204,7 +273,8 @@ const buttonContainerStyles: React.CSSProperties = {
 };
 
 const buttonStyles = (color: string): React.CSSProperties => ({
-  backgroundColor: color === "blue" ? "#3498db" : color === "red" ? "#e74c3c" : "#2ecc71",
+  backgroundColor:
+    color === "blue" ? "#3498db" : color === "red" ? "#e74c3c" : "#2ecc71",
   border: "none",
   borderRadius: "5px",
   color: "#fff",
